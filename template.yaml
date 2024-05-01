@@ -1,0 +1,77 @@
+Transform: AWS::Serverless-2016-10-31
+
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: QRCodeGenerator
+    Author: Salvatore Cozzubo
+    ReadmeUrl: README.md
+    LicenseUrl: LICENSE
+    Labels:
+      - qrcode
+      - generator
+      - lambda
+      - node
+      - api
+    SourceCodeUrl: https://github.com/SalvoCozzubo/qr-code-generator
+    HomePageUrl: https://www.salvatorecozzubo.com
+    Description: A QRCode generator API
+    SemanticVersion: 1.0.0
+
+Resources:
+  ApiGw:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      BinaryMediaTypes:
+        - '*/*'
+      EndpointConfiguration:
+        Type: REGIONAL
+
+  GeneratorFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./src/generator-fn
+      Handler: index.handler
+      Runtime: nodejs20.x
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGw
+            Path: /
+            Method: get
+            RequestParameters:
+              - method.request.querystring.data:
+                  Required: true
+  
+  CFDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      Tags:
+        - Key: Project
+          Value: QRCodeGenerator
+        - Key: Name
+          Value: CloudFront
+      DistributionConfig:
+        HttpVersion: http2and3
+        Enabled: true
+        DefaultCacheBehavior:
+          TargetOriginId: ApiGateway
+          ViewerProtocolPolicy: https-only
+          ForwardedValues:
+            QueryString: true
+            Cookies:
+              Forward: all
+        Origins:
+          - Id: ApiGateway
+            DomainName: !Join ['', [!Ref ApiGw, '.execute-api.', !Ref 'AWS::Region', '.amazonaws.com']]
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [ "TLSv1", "TLSv1.1", "TLSv1.2" ]
+            OriginPath: "/Prod"
+
+Outputs:
+  Url:
+    Description: CloudFront URL
+    Value: !GetAtt CFDistribution.DomainName
